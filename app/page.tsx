@@ -1,5 +1,13 @@
-import { ComponentExample } from "@/components/component-example";
+import FooterSection from "@/components/home/footer";
+import HeroSection from "@/components/home/hero-section";
 
 export default function Page() {
-return <ComponentExample />;
+return (
+    <>
+    <HeroSection />
+
+    <FooterSection/>
+    </>
+)
+;
 }
