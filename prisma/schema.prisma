@@ -1,0 +1,171 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  
+  // Relation avec Company
+  companyId     String?
+  company       Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  @@index([companyId])
+}
+
+model Company {
+  id            String    @id @default(cuid())
+  companyName   String?   @unique
+  companyEmail  String?   @unique
+  address       String?
+  phone         String?
+  logo          String?
+  currency      String    @default("EUR")
+  language      String    @default("fr")
+  
+  // Relation avec User (un utilisateur peut créer/posséder une company)
+  users         User[]
+  
+  // Données métier
+  clients       Client[]
+  invoices      Invoice[]
+  payments      Payment[]
+  products      Product[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Client {
+  id            String    @id @default(cuid())
+  name          String
+  email         String?
+  phone         String?
+  address       String?
+  
+  companyId     String
+  company       Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  invoices      Invoice[]
+  payments      Payment[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  @@index([companyId])
+}
+
+model Product {
+  id            String    @id @default(cuid())
+  name          String
+  description   String?
+  price         Float     @default(0)
+  
+  companyId     String
+  company       Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  invoiceItems  InvoiceItem[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  @@index([companyId])
+}
+
+model Invoice {
+  id            String    @id @default(cuid())
+  invoiceNumber String    @unique
+  status        String    @default("PENDING")
+  issueDate     DateTime  @default(now())
+  dueDate       DateTime
+  paidDate      DateTime?
+  paymentMethod String?   @default("CASH")
+  
+  subtotal      Float     @default(0)
+  taxAmount     Float     @default(0)
+  total         Float     @default(0)
+  amountPaid    Float     @default(0)
+  amountDue     Float     @default(0)
+  
+  notes         String?
+  terms         String?
+  
+  companyId     String
+  company       Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  clientId      String
+  client        Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  items         InvoiceItem[]
+  payments      Payment[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  @@index([companyId])
+  @@index([clientId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+model InvoiceItem {
+  id            String    @id @default(cuid())
+  description   String
+  quantity      Float     @default(1)
+  unitPrice     Float     @default(0)
+  taxRate       Float     @default(20.0)
+  
+  subtotal      Float     @default(0)
+  taxAmount     Float     @default(0)
+  total         Float     @default(0)
+  
+  invoiceId     String
+  invoice       Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  
+  productId     String?
+  product       Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  @@index([invoiceId])
+}
+
+model Payment {
+  id            String    @id @default(cuid())
+  amount        Float
+  paymentDate   DateTime  @default(now())
+  paymentMethod String    @default("CASH")
+  reference     String?
+  notes         String?
+  
+  type          String    @default("INVOICE_PAYMENT")
+  
+  companyId     String
+  company       Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  clientId      String
+  client        Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  invoiceId     String?
+  invoice       Invoice?  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  @@index([companyId])
+  @@index([clientId])
+  @@index([invoiceId])
+}

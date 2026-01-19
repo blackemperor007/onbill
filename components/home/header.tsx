@@ -5,6 +5,7 @@ import { Menu, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import React from 'react'
 import { cn } from '@/lib/utils'
+import { SignOutButton } from '@clerk/nextjs'
 
 const menuItems = [
    {
@@ -94,7 +95,7 @@ export const HeroHeader = () => {
                                     variant="outline"
                                     size="sm"
                                     className={cn(isScrolled && 'lg:hidden')}>
-                                    <Link href="#">
+                                    <Link href="/sign-in">
                                         <span>Login</span>
                                     </Link>
                                 </Button>
@@ -102,9 +103,15 @@ export const HeroHeader = () => {
                                     asChild
                                     size="sm"
                                     className={cn(isScrolled && 'lg:hidden')}>
-                                    <Link href="#">
+                                    <Link href="/sign-up">
                                         <span>Sign Up</span>
                                     </Link>
+                                </Button>
+                                <Button
+                                    asChild
+                                    size="sm"
+                                    className={cn(isScrolled && 'lg:hidden')}>
+                                    <SignOutButton/>
                                 </Button>
                                 <Button
                                     asChild
