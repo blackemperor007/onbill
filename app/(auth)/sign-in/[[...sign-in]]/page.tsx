@@ -16,7 +16,7 @@ export default function Page() {
           <div className="w-full max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)]">
               <div className="text-center w-full max-w-md sm:max-w-lg">
-                  <SignIn forceRedirectUrl={"/onboarding"} />
+                  <SignIn />
               </div>
             </div>
           </div>

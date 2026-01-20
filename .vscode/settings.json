@@ -1,3 +1,5 @@
 {
-    "editor.cursorStyle": "line"
+    "editor.cursorStyle": "line",
+    "WillLuke.nextjs.addTypesOnSave": true,
+    "WillLuke.nextjs.hasPrompted": true
 }
