@@ -1,6 +1,7 @@
 import { SidebarProvider } from "@/components/ui/sidebar";
 import DashboardSidebar from "./_components/DashboardSidebar";
 import DashboardHeader from "./_components/DashboardHeader";
+import { Suspense } from "react";
 
 export default function DashboardLayout({children} : { children : React.ReactNode}) {
     return (
@@ -9,9 +10,9 @@ export default function DashboardLayout({children} : { children : React.ReactNod
             <DashboardSidebar/>
             <main className="w-full relative">
                 <DashboardHeader/>
-                {/* <Suspense fallback={<p>Loading...</p>}> */}
+                <Suspense fallback={<p>Loading...</p>}>
                     {children}
-                {/* </Suspense> */}
+                </Suspense>
             </main>
         </SidebarProvider>
     )
