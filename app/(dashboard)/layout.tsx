@@ -1,12 +1,14 @@
 import { SidebarProvider } from "@/components/ui/sidebar";
+import DashboardSidebar from "./_components/DashboardSidebar";
+import DashboardHeader from "./_components/DashboardHeader";
 
 export default function DashboardLayout({children} : { children : React.ReactNode}) {
     return (
         <SidebarProvider>
             {/**sidebar**/}
-            {/* <DashboardSidebar/> */}
+            <DashboardSidebar/>
             <main className="w-full relative">
-                {/* <DashboardHeader/> */}
+                <DashboardHeader/>
                 {/* <Suspense fallback={<p>Loading...</p>}> */}
                     {children}
                 {/* </Suspense> */}

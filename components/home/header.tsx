@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import React from 'react'
 import { cn } from '@/lib/utils'
 import { SignOutButton } from '@clerk/nextjs'
+import { ModeToggle } from '../ui/mode-toggle'
 
 const menuItems = [
    {
@@ -107,12 +108,7 @@ export const HeroHeader = () => {
                                         <span>Sign Up</span>
                                     </Link>
                                 </Button>
-                                <Button
-                                    asChild
-                                    size="sm"
-                                    className={cn(isScrolled && 'lg:hidden')}>
-                                    <SignOutButton/>
-                                </Button>
+                                <ModeToggle/>
                                 <Button
                                     asChild
                                     size="sm"
