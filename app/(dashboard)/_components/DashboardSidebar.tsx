@@ -253,7 +253,7 @@ export default async function DashboardSidebar() {
 
 
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar>
       <SidebarHeader className="border-border/50">
         <div className="flex items-center gap-2 px-4 py-3">
           <Link href="/dashboard" className="flex items-center gap-2 group">
@@ -316,21 +316,21 @@ export default async function DashboardSidebar() {
           <SidebarGroupContent>
             <div className="space-y-1 px-3 py-1">
               <Link 
-                href="/invoices/new"
+                href="/invoices/create"
                 className="flex items-center gap-2 px-3 py-2 text-sm rounded-md hover:bg-accent transition-colors"
               >
                 <FileText className="h-4 w-4" />
                 Nouvelle facture
               </Link>
               <Link 
-                href="/clients/new"
+                href="/clients/create"
                 className="flex items-center gap-2 px-3 py-2 text-sm rounded-md hover:bg-accent transition-colors"
               >
                 <Users className="h-4 w-4" />
                 Nouveau client
               </Link>
               <Link 
-                href="/products/new"
+                href="/products/create"
                 className="flex items-center gap-2 px-3 py-2 text-sm rounded-md hover:bg-accent transition-colors"
               >
                 <Package className="h-4 w-4" />

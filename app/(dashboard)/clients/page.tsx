@@ -1,3 +1,4 @@
+// app/dashboard/clients/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -9,13 +10,13 @@ import {
   Eye, 
   Edit, 
   Trash2, 
-  Package,
-  Euro,
+  User,
+  Mail,
+  Phone,
+  MapPin,
   FileText,
-  AlertCircle,
-  Tag,
-  Calendar,
-  ShoppingCart
+  Users,
+  AlertCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +30,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -44,41 +46,30 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-interface Product {
+interface Client {
   id: string;
   name: string;
-  description: string | null;
-  price: number;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
   createdAt: string;
   updatedAt: string;
-  companyId: string;
-  company?: {
-    id: string;
-    companyName: string | null;
-  };
   _count?: {
-    invoiceItems: number;
+    invoices: number;
+    payments: number;
   };
 }
 
-interface Company {
-  id: string;
-  companyName: string | null;
-}
-
-export default function ProductsPage() {
+export default function ClientsPage() {
   const router = useRouter();
-  const [products, setProducts] = useState<Product[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
-  const [productToDelete, setProductToDelete] = useState<string | null>(null);
+  const [selectedClients, setSelectedClients] = useState<string[]>([]);
+  const [clientToDelete, setClientToDelete] = useState<string | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [selectedCompany, setSelectedCompany] = useState<string>("all");
 
   // Debounce search
   useEffect(() => {
@@ -88,128 +79,101 @@ export default function ProductsPage() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Fetch companies
-  const fetchCompanies = async () => {
-    try {
-      const response = await fetch('/api/companies/user');
-      if (response.ok) {
-        const data = await response.json();
-        setCompanies(data);
-      }
-    } catch (error) {
-      console.error("Error fetching companies:", error);
-    }
-  };
-
-  // Fetch products
-  const fetchProducts = async () => {
+  const fetchClients = async () => {
     try {
       setIsLoading(true);
       const params = new URLSearchParams();
       if (debouncedSearch) params.append('search', debouncedSearch);
-      if (selectedCompany !== "all") params.append('companyId', selectedCompany);
       
-      const response = await fetch(`/api/products?${params.toString()}`);
+      const response = await fetch(`/api/clients?${params.toString()}`);
       const data = await response.json();
 
-      if (response.ok) {
-        setProducts(data.data || []);
+      if (response.ok && data.success) {
+        setClients(data.data || []);
       } else {
-        toast.error(data.error || "Erreur lors du chargement des produits");
-        setProducts([]);
+        toast.error(data.error || "Erreur lors du chargement des clients");
+        setClients([]);
       }
     } catch (error) {
-      console.error("Error fetching products:", error);
+      console.error("Error fetching clients:", error);
       toast.error("Erreur de connexion au serveur");
-      setProducts([]);
+      setClients([]);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchCompanies();
-  }, []);
+    fetchClients();
+  }, [debouncedSearch]);
 
-  useEffect(() => {
-    fetchProducts();
-  }, [debouncedSearch, selectedCompany]);
-
-  const handleDeleteProduct = async () => {
-    if (!productToDelete) return;
+  const handleDeleteClient = async () => {
+    if (!clientToDelete) return;
 
     try {
-      const response = await fetch(`/api/products/${productToDelete}`, {
+      const response = await fetch(`/api/clients/${clientToDelete}`, {
         method: "DELETE",
       });
 
       const data = await response.json();
 
-      if (response.ok) {
-        toast.success("Produit supprimé avec succès");
-        fetchProducts();
+      if (response.ok && data.success) {
+        toast.success(data.message || "Client supprimé avec succès");
+        fetchClients();
       } else {
         toast.error(data.error || "Erreur lors de la suppression");
       }
     } catch (error) {
-      console.error("Error deleting product:", error);
+      console.error("Error deleting client:", error);
       toast.error("Erreur de connexion");
     } finally {
-      setProductToDelete(null);
+      setClientToDelete(null);
       setShowDeleteDialog(false);
     }
   };
 
   const handleBulkDelete = async () => {
-    if (selectedProducts.length === 0) {
-      toast.error("Aucun produit sélectionné");
+    if (selectedClients.length === 0) {
+      toast.error("Aucun client sélectionné");
       return;
     }
 
     try {
-      const loadingToast = toast.loading("Suppression en cours...");
-      
-      const response = await fetch("/api/products/bulk", {
+      toast.loading("Suppression en cours...");
+      const response = await fetch("/api/clients/bulk", {
         method: "DELETE",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ productIds: selectedProducts }),
+        body: JSON.stringify({ clientIds: selectedClients }),
       });
 
       const data = await response.json();
 
-      toast.dismiss(loadingToast);
-
-      if (response.ok) {
-        toast.success(`${selectedProducts.length} produit(s) supprimé(s) avec succès`);
-        setSelectedProducts([]);
-        fetchProducts();
+      if (response.ok && data.success) {
+        toast.success(`${selectedClients.length} client(s) supprimé(s) avec succès`);
+        setSelectedClients([]);
+        fetchClients();
       } else {
         toast.error(data.error || "Erreur lors de la suppression");
       }
     } catch (error) {
-      console.error("Error bulk deleting products:", error);
+      console.error("Error bulk deleting clients:", error);
       toast.error("Erreur de connexion");
     }
   };
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('fr-FR', {
-      style: 'currency',
-      currency: 'EUR',
-      minimumFractionDigits: 2,
-    }).format(price);
-  };
-
-  const truncateText = (text: string | null, maxLength: number = 100) => {
-    if (!text) return "-";
-    if (text.length <= maxLength) return text;
-    return text.substring(0, maxLength) + '...';
+  const getInitials = (name: string) => {
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
   };
 
   // Colonne avec boutons d'action visibles
-  const ActionButtons = ({ productId, productName }: { productId: string, productName: string }) => {
+  const ActionButtons = ({ clientId, clientName }: { clientId: string, clientName: string }) => {
     return (
       <div className="flex items-center gap-2">
         <Button
@@ -217,7 +181,7 @@ export default function ProductsPage() {
           size="icon"
           onClick={(e) => {
             e.stopPropagation();
-            router.push(`/products/edit/${productId}`);
+            router.push(`/clients/edit/${clientId}`);
           }}
           title="Modifier"
           className="h-8 w-8"
@@ -225,9 +189,9 @@ export default function ProductsPage() {
           <Edit className="h-4 w-4" />
         </Button>
         
-        <AlertDialog open={showDeleteDialog && productToDelete === productId} onOpenChange={(open) => {
+        <AlertDialog open={showDeleteDialog && clientToDelete === clientId} onOpenChange={(open) => {
           if (!open) {
-            setProductToDelete(null);
+            setClientToDelete(null);
             setShowDeleteDialog(false);
           }
         }}>
@@ -237,7 +201,7 @@ export default function ProductsPage() {
               size="icon"
               onClick={(e) => {
                 e.stopPropagation();
-                setProductToDelete(productId);
+                setClientToDelete(clientId);
                 setShowDeleteDialog(true);
               }}
               title="Supprimer"
@@ -250,19 +214,19 @@ export default function ProductsPage() {
             <AlertDialogHeader>
               <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
               <AlertDialogDescription>
-                Êtes-vous sûr de vouloir supprimer le produit "{productName}" ? 
-                Cette action est irréversible. Le produit sera retiré de toutes les factures existantes.
+                Êtes-vous sûr de vouloir supprimer le client "{clientName}" ? 
+                Cette action est irréversible et supprimera également toutes les factures associées.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel onClick={() => {
-                setProductToDelete(null);
+                setClientToDelete(null);
                 setShowDeleteDialog(false);
               }}>
                 Annuler
               </AlertDialogCancel>
               <AlertDialogAction 
-                onClick={handleDeleteProduct}
+                onClick={handleDeleteClient}
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
                 Supprimer
@@ -279,18 +243,18 @@ export default function ProductsPage() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => router.push(`/products/${productId}`)}>
+            <DropdownMenuItem onClick={() => router.push(`/clients/${clientId}`)}>
               <Eye className="h-4 w-4 mr-2" />
               Voir les détails
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => router.push(`/invoices/create?productId=${productId}`)}>
+            <DropdownMenuItem onClick={() => router.push(`/invoices/create?clientId=${clientId}`)}>
               <FileText className="h-4 w-4 mr-2" />
-              Créer une facture avec ce produit
+              Créer une facture
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem 
               onClick={() => {
-                setProductToDelete(productId);
+                setClientToDelete(clientId);
                 setShowDeleteDialog(true);
               }}
               className="text-destructive focus:text-destructive"
@@ -304,7 +268,7 @@ export default function ProductsPage() {
     );
   };
 
-  const columns: ColumnDef<Product>[] = [
+  const columns: ColumnDef<Client>[] = [
     {
       id: "select",
       header: ({ table }) => (
@@ -331,31 +295,35 @@ export default function ProductsPage() {
     },
     {
       accessorKey: "name",
-      header: "Produit",
+      header: "Client",
       cell: ({ row }) => {
-        const product = row.original;
-        const invoiceCount = product._count?.invoiceItems || 0;
+        const client = row.original;
+        const initials = getInitials(client.name);
+        const invoiceCount = client._count?.invoices || 0;
 
         return (
           <div 
-            className="flex items-start gap-3 cursor-pointer"
-            onClick={() => router.push(`/products/${product.id}`)}
+            className="flex items-center gap-3 cursor-pointer"
+            onClick={() => router.push(`/clients/${client.id}`)}
           >
-            <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-              <Package className="h-5 w-5 text-primary" />
-            </div>
+            <Avatar className="h-9 w-9 border">
+              <AvatarFallback className="bg-primary/10 text-primary">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
             <div className="flex-1 min-w-0">
-              <p className="font-medium truncate">{product.name}</p>
-              {product.description && (
-                <p className="text-sm text-muted-foreground line-clamp-2">
-                  {truncateText(product.description, 80)}
+              <p className="font-medium truncate">{client.name}</p>
+              {client.email && (
+                <p className="text-sm text-muted-foreground truncate flex items-center gap-1">
+                  <Mail className="h-3 w-3 flex-shrink-0" />
+                  <span className="truncate">{client.email}</span>
                 </p>
               )}
               {invoiceCount > 0 && (
                 <div className="flex items-center gap-1 mt-1">
-                  <ShoppingCart className="h-3 w-3 text-primary" />
+                  <FileText className="h-3 w-3 text-primary" />
                   <span className="text-xs text-primary">
-                    Utilisé dans {invoiceCount} facture{invoiceCount > 1 ? 's' : ''}
+                    {invoiceCount} facture{invoiceCount > 1 ? 's' : ''}
                   </span>
                 </div>
               )}
@@ -365,28 +333,41 @@ export default function ProductsPage() {
       },
     },
     {
-      accessorKey: "price",
-      header: "Prix",
+      accessorKey: "contact",
+      header: "Contact",
       cell: ({ row }) => {
-        const price = row.original.price;
+        const client = row.original;
         return (
-          <div className="flex items-center gap-2">
-            <Euro className="h-4 w-4 text-muted-foreground" />
-            <span className="font-semibold">{formatPrice(price)}</span>
-            <span className="text-sm text-muted-foreground">HT</span>
+          <div className="space-y-1">
+            {client.phone && (
+              <div className="flex items-center gap-2 text-sm">
+                <Phone className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                <span className="truncate">{client.phone}</span>
+              </div>
+            )}
+            {client.address && (
+              <div className="flex items-start gap-2 text-sm">
+                <MapPin className="h-3 w-3 text-muted-foreground mt-0.5 flex-shrink-0" />
+                <span className="text-muted-foreground line-clamp-2 truncate">
+                  {client.address}
+                </span>
+              </div>
+            )}
           </div>
         );
       },
     },
     {
-      accessorKey: "company",
-      header: "Société",
+      accessorKey: "invoices",
+      header: "Factures",
       cell: ({ row }) => {
-        const companyName = row.original.company?.companyName || "Société";
+        const invoiceCount = row.original._count?.invoices || 0;
         return (
-          <Badge variant="outline" className="whitespace-nowrap">
-            {companyName}
-          </Badge>
+          <div className="text-center">
+            <Badge variant={invoiceCount > 0 ? "default" : "secondary"} className="min-w-[60px]">
+              {invoiceCount} facture{invoiceCount !== 1 ? "s" : ""}
+            </Badge>
+          </div>
         );
       },
     },
@@ -396,8 +377,7 @@ export default function ProductsPage() {
       cell: ({ row }) => {
         try {
           return (
-            <div className="text-sm text-muted-foreground flex items-center gap-1">
-              <Calendar className="h-3 w-3" />
+            <div className="text-sm text-muted-foreground">
               {format(new Date(row.original.createdAt), "dd/MM/yyyy")}
             </div>
           );
@@ -410,16 +390,16 @@ export default function ProductsPage() {
       id: "actions",
       header: "Actions",
       cell: ({ row }) => {
-        const product = row.original;
+        const client = row.original;
         return (
-          <ActionButtons productId={product.id} productName={product.name} />
+          <ActionButtons clientId={client.id} clientName={client.name} />
         );
       },
     },
   ];
 
   // Skeleton loading
-  if (isLoading && products.length === 0) {
+  if (isLoading && clients.length === 0) {
     return (
       <div className="p-6 space-y-6">
         <div className="flex items-center justify-between">
@@ -429,16 +409,14 @@ export default function ProductsPage() {
         
         <Card>
           <CardHeader>
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="flex items-center justify-between">
               <Skeleton className="h-6 w-48" />
-              <div className="flex items-center gap-2">
-                <Skeleton className="h-10 w-40" />
-                <Skeleton className="h-10 w-64" />
-              </div>
+              <Skeleton className="h-10 w-64" />
             </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
+              <Skeleton className="h-10 w-full" />
               {[...Array(5)].map((_, i) => (
                 <Skeleton key={i} className="h-16 w-full" />
               ))}
@@ -456,19 +434,19 @@ export default function ProductsPage() {
         <Button
           variant="destructive"
           size="sm"
-          disabled={selectedProducts.length === 0}
+          disabled={selectedClients.length === 0}
           className="gap-2"
         >
           <Trash2 className="h-4 w-4" />
-          Supprimer ({selectedProducts.length})
+          Supprimer ({selectedClients.length})
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Confirmer la suppression multiple</AlertDialogTitle>
           <AlertDialogDescription>
-            Êtes-vous sûr de vouloir supprimer {selectedProducts.length} produit(s) sélectionné(s) ?
-            Cette action est irréversible.
+            Êtes-vous sûr de vouloir supprimer {selectedClients.length} client(s) sélectionné(s) ?
+            Cette action est irréversible et supprimera également toutes les factures associées.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -484,28 +462,21 @@ export default function ProductsPage() {
     </AlertDialog>
   );
 
-  // Calcul des statistiques
-  const totalProducts = products.length;
-  const usedInInvoices = products.filter(p => (p._count?.invoiceItems || 0) > 0).length;
-  const averagePrice = totalProducts > 0 
-    ? products.reduce((sum, p) => sum + p.price, 0) / totalProducts 
-    : 0;
-
   return (
     <div className="p-6 space-y-6">
       {/* Header avec titre à gauche et bouton à droite */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Produits</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Clients</h1>
           <p className="text-muted-foreground mt-1">
-            Gérez votre catalogue de produits et services
+            Gérez votre liste de clients
           </p>
         </div>
         <div className="flex items-center gap-2">
           <BulkDeleteDialog />
-          <Button onClick={() => router.push("/products/create")} className="gap-2">
+          <Button onClick={() => router.push("/clients/create")} className="gap-2">
             <Plus className="h-4 w-4" />
-            Nouveau produit
+            Nouveau client
           </Button>
         </div>
       </div>
@@ -514,116 +485,97 @@ export default function ProductsPage() {
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Produits</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Total Clients</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalProducts}</div>
-            <p className="text-xs text-muted-foreground">Dans votre catalogue</p>
+            <div className="text-2xl font-bold">{clients.length}</div>
+            <p className="text-xs text-muted-foreground">Tous vos clients</p>
           </CardContent>
         </Card>
         
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Utilisés</CardTitle>
-            <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Avec factures</CardTitle>
+            <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{usedInInvoices}</div>
-            <p className="text-xs text-muted-foreground">
-              Dans des factures ({totalProducts > 0 ? Math.round((usedInInvoices / totalProducts) * 100) : 0}%)
-            </p>
+            <div className="text-2xl font-bold">
+              {clients.filter(c => (c._count?.invoices || 0) > 0).length}
+            </div>
+            <p className="text-xs text-muted-foreground">Clients actifs</p>
           </CardContent>
         </Card>
         
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Prix moyen</CardTitle>
-            <Euro className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Sans email</CardTitle>
+            <Mail className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatPrice(averagePrice)}</div>
-            <p className="text-xs text-muted-foreground">Prix HT moyen</p>
+            <div className="text-2xl font-bold">
+              {clients.filter(c => !c.email).length}
+            </div>
+            <p className="text-xs text-muted-foreground">À compléter</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Tableau des produits */}
+      {/* Tableau des clients */}
       <Card>
         <CardHeader>
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
-              <CardTitle>Liste des produits</CardTitle>
+              <CardTitle>Liste des clients</CardTitle>
               <CardDescription>
-                {products.length} produit{products.length !== 1 ? "s" : ""} trouvé{products.length !== 1 ? "s" : ""}
+                {clients.length} client{clients.length !== 1 ? "s" : ""} trouvé{clients.length !== 1 ? "s" : ""}
               </CardDescription>
             </div>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="w-full sm:w-[200px]">
-                <Select value={selectedCompany} onValueChange={setSelectedCompany}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Toutes les sociétés" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Toutes les sociétés</SelectItem>
-                    {companies.map((company) => (
-                      <SelectItem key={company.id} value={company.id}>
-                        {company.companyName || 'Société sans nom'}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="relative w-full sm:w-[300px]">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Rechercher un produit..."
-                  className="pl-10"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
+            <div className="relative w-full md:w-auto">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Rechercher un client..."
+                className="pl-10 w-full md:w-[300px]"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          {products.length === 0 && !isLoading ? (
+          {clients.length === 0 && !isLoading ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <div className="h-24 w-24 rounded-full bg-muted flex items-center justify-center mb-4">
-                <Package className="h-12 w-12 text-muted-foreground" />
+                <User className="h-12 w-12 text-muted-foreground" />
               </div>
-              <h3 className="text-lg font-semibold">Aucun produit</h3>
+              <h3 className="text-lg font-semibold">Aucun client</h3>
               <p className="text-muted-foreground mt-1 mb-4">
-                {searchQuery || selectedCompany !== "all"
-                  ? "Aucun produit ne correspond à votre recherche" 
-                  : "Commencez par ajouter votre premier produit"}
+                {searchQuery 
+                  ? "Aucun client ne correspond à votre recherche" 
+                  : "Commencez par ajouter votre premier client"}
               </p>
-              <Button onClick={() => router.push("/products/create")}>
+              <Button onClick={() => router.push("/clients/create")}>
                 <Plus className="h-4 w-4 mr-2" />
-                Ajouter un produit
+                Ajouter un client
               </Button>
             </div>
           ) : (
             <DataTable
               columns={columns}
-              data={products}
+              data={clients}
               searchKey="name"
-              searchPlaceholder="Rechercher par nom, description..."
+              searchPlaceholder="Rechercher par nom, email..."
               isLoading={isLoading}
-              onRowClick={(row) => router.push(`/products/${row.id}`)}
-              
+              onRowClick={(row) => router.push(`/clients/${row.id}`)}
               emptyState={
                 <div className="py-12 text-center">
-                  <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <User className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                   <h3 className="text-lg font-semibold mb-2">Aucun résultat</h3>
                   <p className="text-muted-foreground mb-4">
-                    Aucun produit ne correspond à votre recherche
+                    Aucun client ne correspond à votre recherche
                   </p>
-                  <Button variant="outline" onClick={() => {
-                    setSearchQuery("");
-                    setSelectedCompany("all");
-                  }}>
-                    Réinitialiser les filtres
+                  <Button variant="outline" onClick={() => setSearchQuery("")}>
+                    Réinitialiser la recherche
                   </Button>
                 </div>
               }
