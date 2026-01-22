@@ -238,3 +238,107 @@ export async function PUT(
     );
   }
 }
+
+// DELETE /api/clients/[id] - Supprimer un client spécifique
+export async function DELETE(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  console.log(`=== DELETE /api/clients/${params.id} called ===`);
+  
+  try {
+    const { userId } = await auth();
+    
+    if (!userId) {
+      return NextResponse.json({ 
+        success: false,
+        error: 'Non autorisé' 
+      }, { status: 401 });
+    }
+
+    // Récupérer l'utilisateur et sa company
+    const user = await prisma.user.findUnique({
+      where: { clerkUserId: userId },
+      include: { company: true }
+    });
+
+    if (!user?.company) {
+      return NextResponse.json({ 
+        success: false,
+        error: 'Aucune entreprise trouvée' 
+      }, { status: 404 });
+    }
+
+    const companyId = user.company.id;
+    const clientId = params.id;
+
+    // Vérifier que le client existe et appartient à l'entreprise
+    const client = await prisma.client.findUnique({
+      where: {
+        id: clientId,
+        companyId,
+      },
+      include: {
+        _count: {
+          select: {
+            invoices: true,
+            payments: true,
+          }
+        }
+      },
+    });
+
+    if (!client) {
+      return NextResponse.json({ 
+        success: false,
+        error: 'Client non trouvé' 
+      }, { status: 404 });
+    }
+
+    console.log(`Client found: ${client.name}, invoices: ${client._count.invoices}`);
+
+    // Note: Avec `onDelete: Cascade` dans le schéma, les factures associées seront automatiquement supprimées
+
+    // Supprimer le client
+    await prisma.client.delete({
+      where: {
+        id: clientId,
+        companyId,
+      },
+    });
+
+    console.log('Client deleted successfully');
+
+    return NextResponse.json({ 
+      success: true, 
+      message: 'Client supprimé avec succès',
+      data: {
+        id: clientId,
+        name: client.name,
+        invoiceCount: client._count.invoices
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error deleting client:', error);
+    
+    // Gérer les erreurs de contrainte de clé étrangère
+    if (error instanceof Error && error.message.includes('Foreign key constraint')) {
+      return NextResponse.json(
+        { 
+          success: false,
+          error: 'Impossible de supprimer ce client car il est utilisé dans des factures' 
+        },
+        { status: 400 }
+      );
+    }
+
+    return NextResponse.json(
+      { 
+        success: false,
+        error: 'Erreur interne du serveur' 
+      },
+      { status: 500 }
+    );
+  }
+}

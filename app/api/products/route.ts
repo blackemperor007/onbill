@@ -3,194 +3,191 @@ import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import prisma from '@/lib/prisma';
 
+// GET /api/products - Récupérer tous les produits
 export async function GET(request: Request) {
+  console.log('=== GET /api/products called ===');
+  
   try {
     const { userId } = await auth();
-    const { searchParams } = new URL(request.url);
+    console.log('User ID:', userId);
     
     if (!userId) {
-      return NextResponse.json(
-        { error: 'Non autorisé' },
-        { status: 401 }
-      );
+      return NextResponse.json({ 
+        success: false,
+        error: 'Non autorisé' 
+      }, { status: 401 });
     }
 
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '10');
+    // Récupérer l'utilisateur et sa company
+    console.log('Fetching user from database...');
+    const user = await prisma.user.findUnique({
+      where: { clerkUserId: userId },
+      include: { company: true }
+    });
+
+    console.log('User found:', !!user);
+    console.log('Company found:', !!user?.company);
+
+    if (!user?.company) {
+      return NextResponse.json({ 
+        success: false,
+        error: 'Aucune entreprise trouvée' 
+      }, { status: 404 });
+    }
+
+    const companyId = user.company.id;
+    console.log('Company ID:', companyId);
+
+    const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
-    const companyId = searchParams.get('companyId');
-
-    const skip = (page - 1) * limit;
-
-    // Vérifier que l'utilisateur a accès à cette company
-    let userCompanyId = companyId;
-    
-    if (!companyId) {
-      // Récupérer la company de l'utilisateur
-      const user = await prisma.user.findFirst({
-        where: { clerkUserId: userId },
-        select: { companyId: true }
-      });
-      
-      if (!user || !user.companyId) {
-        return NextResponse.json(
-          { error: 'Aucune société associée' },
-          { status: 400 }
-        );
-      }
-      
-      userCompanyId = user.companyId;
-    } else {
-      // Vérifier que l'utilisateur a accès à cette company
-      const user = await prisma.user.findFirst({
-        where: {
-          clerkUserId: userId,
-          companyId: companyId
-        }
-      });
-
-      if (!user) {
-        return NextResponse.json(
-          { error: 'Accès non autorisé' },
-          { status: 403 }
-        );
-      }
-    }
+    console.log('Search query:', search);
 
     // Construire les conditions de recherche
-    const where: any = {
-      companyId: userCompanyId,
-      ...(search && {
-        OR: [
-          {
-            name: {
-              contains: search,
-              mode: 'insensitive',
-            },
-          },
-          {
-            description: {
-              contains: search,
-              mode: 'insensitive',
-            },
-          },
-        ],
-      }),
-    };
+    const where: any = { companyId };
 
-    // Récupérer les produits avec pagination
-    const [products, total] = await Promise.all([
-      prisma.product.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: {
-          createdAt: 'desc',
-        },
-        select: {
-          id: true,
-          name: true,
-          description: true,
-          price: true,
-          createdAt: true,
-          updatedAt: true,
-          companyId: true,
-          _count: {
-            select: {
-              invoiceItems: true,
-            },
+    if (search) {
+      where.OR = [
+        {
+          name: {
+            contains: search,
+            mode: 'insensitive',
           },
         },
-      }),
-      prisma.product.count({ where }),
-    ]);
+        {
+          description: {
+            contains: search,
+            mode: 'insensitive',
+          },
+        },
+      ];
+    }
 
-    const totalPages = Math.ceil(total / limit);
-
-    return NextResponse.json({
-      data: products,
-      total,
-      page,
-      limit,
-      totalPages,
+    console.log('Fetching products from database...');
+    // Récupérer les produits avec le compte des factures où ils sont utilisés
+    const products = await prisma.product.findMany({
+      where,
+      include: {
+        _count: {
+          select: {
+            invoiceItems: true,
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
     });
+
+    console.log(`Found ${products.length} products`);
+
+    return NextResponse.json({ 
+      success: true,
+      data: products,
+      total: products.length,
+    });
+    
   } catch (error) {
     console.error('Error fetching products:', error);
     return NextResponse.json(
-      { error: 'Erreur interne du serveur' },
+      { 
+        success: false,
+        error: 'Erreur interne du serveur',
+        details: process.env.NODE_ENV === 'development'
+      },
       { status: 500 }
     );
   }
 }
 
+// POST /api/products - Créer un nouveau produit
 export async function POST(request: Request) {
+  console.log('=== POST /api/products called ===');
+  
   try {
     const { userId } = await auth();
     
     if (!userId) {
-      return NextResponse.json(
-        { error: 'Non autorisé' },
-        { status: 401 }
-      );
-    }
-
-    const body = await request.json();
-    const { name, description, price, companyId } = body;
-
-    // Validation des données
-    if (!name || !name.trim()) {
-      return NextResponse.json(
-        { error: 'Le nom du produit est requis' },
-        { status: 400 }
-      );
-    }
-
-    if (typeof price !== 'number' || price < 0) {
-      return NextResponse.json(
-        { error: 'Le prix doit être un nombre positif' },
-        { status: 400 }
-      );
+      return NextResponse.json({ 
+        success: false,
+        error: 'Non autorisé' 
+      }, { status: 401 });
     }
 
     // Récupérer l'utilisateur et sa company
-    const user = await prisma.user.findFirst({
+    const user = await prisma.user.findUnique({
       where: { clerkUserId: userId },
-      select: { 
-        id: true,
-        companyId: true 
-      }
+      include: { company: true }
     });
 
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Utilisateur non trouvé' },
-        { status: 404 }
-      );
+    if (!user?.company) {
+      return NextResponse.json({ 
+        success: false,
+        error: 'Aucune entreprise trouvée' 
+      }, { status: 404 });
     }
 
-    if (!user.companyId) {
+    const companyId = user.company.id;
+    const data = await request.json();
+    console.log('Product data:', data);
+
+    // Validation des données selon le schéma Prisma
+    if (!data.name || data.name.trim() === '') {
       return NextResponse.json(
-        { error: 'Vous devez être associé à une société pour créer un produit' },
+        { 
+          success: false,
+          error: 'Le nom du produit est obligatoire' 
+        },
         { status: 400 }
       );
     }
 
-    // Vérifier que l'utilisateur a accès à cette company
-    // (optionnel : si companyId est fourni, vérifier qu'elle correspond à celle de l'utilisateur)
-    if (companyId && companyId !== user.companyId) {
+    // Validation du prix
+    if (data.price === undefined || data.price === null) {
       return NextResponse.json(
-        { error: 'Accès non autorisé à cette société' },
-        { status: 403 }
+        { 
+          success: false,
+          error: 'Le prix du produit est obligatoire' 
+        },
+        { status: 400 }
       );
     }
 
-    // Créer le produit
+    const priceValue = parseFloat(data.price);
+    if (isNaN(priceValue) || priceValue < 0) {
+      return NextResponse.json(
+        { 
+          success: false,
+          error: 'Le prix doit être un nombre positif' 
+        },
+        { status: 400 }
+      );
+    }
+
+    // Optionnel : Vérifier si un produit avec le même nom existe déjà dans la même entreprise
+    const existingProduct = await prisma.product.findFirst({
+      where: {
+        companyId,
+        name: data.name.trim(),
+      },
+    });
+
+    if (existingProduct) {
+      return NextResponse.json(
+        { 
+          success: false,
+          error: 'Un produit avec ce nom existe déjà dans votre catalogue' 
+        },
+        { status: 409 }
+      );
+    }
+
+    // Créer le produit selon le schéma
     const product = await prisma.product.create({
       data: {
-        name: name.trim(),
-        description: description?.trim() || null,
-        price: price,
-        companyId: user.companyId, // Toujours utiliser la company de l'utilisateur
+        name: data.name.trim(),
+        description: data.description?.trim() || null,
+        price: priceValue,
+        companyId,
       },
       select: {
         id: true,
@@ -199,25 +196,154 @@ export async function POST(request: Request) {
         price: true,
         createdAt: true,
         updatedAt: true,
-        companyId: true,
-      }
+      },
     });
 
-    return NextResponse.json(product, { status: 201 });
-  } catch (error: any) {
+    console.log('Product created:', product.id);
+
+    return NextResponse.json({
+      success: true,
+      message: 'Produit créé avec succès',
+      data: product,
+    }, { status: 201 });
+
+  } catch (error) {
     console.error('Error creating product:', error);
     
-    // Gestion des erreurs spécifiques
-    if (error.code === 'P2002') {
-      // Erreur de contrainte unique (si vous avez des contraintes)
+    // Gérer les erreurs de contrainte unique
+    if (error instanceof Error && error.message.includes('Unique constraint failed')) {
       return NextResponse.json(
-        { error: 'Un produit avec ce nom existe déjà pour votre société' },
+        { 
+          success: false,
+          error: 'Un produit avec ces informations existe déjà' 
+        },
         { status: 409 }
       );
     }
-    
+
+    // Gérer les erreurs de validation Prisma
+    if (error instanceof Error && error.message.includes('Invalid value')) {
+      return NextResponse.json(
+        { 
+          success: false,
+          error: 'Les données fournies sont invalides' 
+        },
+        { status: 400 }
+      );
+    }
+
     return NextResponse.json(
-      { error: 'Erreur interne du serveur' },
+      { 
+        success: false,
+        error: 'Erreur interne du serveur' 
+      },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE /api/products/bulk - Suppression multiple
+export async function DELETE(request: Request) {
+  console.log('=== DELETE /api/products/bulk called ===');
+  
+  try {
+    const { userId } = await auth();
+    
+    if (!userId) {
+      return NextResponse.json({ 
+        success: false,
+        error: 'Non autorisé' 
+      }, { status: 401 });
+    }
+
+    const { productIds } = await request.json();
+    console.log('Product IDs to delete:', productIds);
+
+    if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
+      return NextResponse.json(
+        { 
+          success: false,
+          error: 'Liste de produits invalide' 
+        },
+        { status: 400 }
+      );
+    }
+
+    // Vérifier que l'utilisateur a accès à ces produits
+    const user = await prisma.user.findUnique({
+      where: { clerkUserId: userId },
+      include: { company: true }
+    });
+
+    if (!user?.company) {
+      return NextResponse.json({ 
+        success: false,
+        error: 'Aucune entreprise trouvée' 
+      }, { status: 404 });
+    }
+
+    const companyId = user.company.id;
+
+    // Vérifier que tous les produits appartiennent à cette company
+    const products = await prisma.product.findMany({
+      where: {
+        id: { in: productIds },
+        companyId,
+      },
+      include: {
+        _count: {
+          select: {
+            invoiceItems: true,
+          }
+        }
+      },
+    });
+
+    if (products.length !== productIds.length) {
+      return NextResponse.json(
+        { 
+          success: false,
+          error: 'Accès non autorisé à certains produits' 
+        },
+        { status: 403 }
+      );
+    }
+
+    // Vérifier si certains produits sont utilisés dans des factures
+    const usedProducts = products.filter(p => p._count.invoiceItems > 0);
+    if (usedProducts.length > 0) {
+      const productNames = usedProducts.map(p => p.name).join(', ');
+      return NextResponse.json(
+        { 
+          success: false,
+          error: `Les produits suivants sont utilisés dans des factures et ne peuvent pas être supprimés : ${productNames}`,
+          usedProducts: usedProducts.map(p => ({ id: p.id, name: p.name }))
+        },
+        { status: 400 }
+      );
+    }
+
+    // Supprimer les produits
+    await prisma.product.deleteMany({
+      where: {
+        id: { in: productIds },
+        companyId,
+      },
+    });
+
+    console.log(`Deleted ${productIds.length} products`);
+
+    return NextResponse.json({ 
+      success: true, 
+      message: `${productIds.length} produit(s) supprimé(s) avec succès` 
+    });
+  } catch (error) {
+    console.error('Error bulk deleting products:', error);
+    return NextResponse.json(
+      { 
+        success: false,
+        error: 'Erreur interne du serveur' 
+      },
       { status: 500 }
     );
   }

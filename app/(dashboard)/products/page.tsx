@@ -1,3 +1,4 @@
+// app/dashboard/products/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -13,9 +14,7 @@ import {
   Euro,
   FileText,
   AlertCircle,
-  Tag,
-  Calendar,
-  ShoppingCart
+  Filter
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +28,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -44,7 +44,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface Product {
   id: string;
@@ -53,19 +52,9 @@ interface Product {
   price: number;
   createdAt: string;
   updatedAt: string;
-  companyId: string;
-  company?: {
-    id: string;
-    companyName: string | null;
-  };
   _count?: {
     invoiceItems: number;
   };
-}
-
-interface Company {
-  id: string;
-  companyName: string | null;
 }
 
 export default function ProductsPage() {
@@ -77,8 +66,6 @@ export default function ProductsPage() {
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [productToDelete, setProductToDelete] = useState<string | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [selectedCompany, setSelectedCompany] = useState<string>("all");
 
   // Debounce search
   useEffect(() => {
@@ -88,31 +75,16 @@ export default function ProductsPage() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Fetch companies
-  const fetchCompanies = async () => {
-    try {
-      const response = await fetch('/api/companies/user');
-      if (response.ok) {
-        const data = await response.json();
-        setCompanies(data);
-      }
-    } catch (error) {
-      console.error("Error fetching companies:", error);
-    }
-  };
-
-  // Fetch products
   const fetchProducts = async () => {
     try {
       setIsLoading(true);
       const params = new URLSearchParams();
       if (debouncedSearch) params.append('search', debouncedSearch);
-      if (selectedCompany !== "all") params.append('companyId', selectedCompany);
       
       const response = await fetch(`/api/products?${params.toString()}`);
       const data = await response.json();
 
-      if (response.ok) {
+      if (response.ok && data.success) {
         setProducts(data.data || []);
       } else {
         toast.error(data.error || "Erreur lors du chargement des produits");
@@ -128,12 +100,8 @@ export default function ProductsPage() {
   };
 
   useEffect(() => {
-    fetchCompanies();
-  }, []);
-
-  useEffect(() => {
     fetchProducts();
-  }, [debouncedSearch, selectedCompany]);
+  }, [debouncedSearch]);
 
   const handleDeleteProduct = async () => {
     if (!productToDelete) return;
@@ -145,8 +113,8 @@ export default function ProductsPage() {
 
       const data = await response.json();
 
-      if (response.ok) {
-        toast.success("Produit supprimé avec succès");
+      if (response.ok && data.success) {
+        toast.success(data.message || "Produit supprimé avec succès");
         fetchProducts();
       } else {
         toast.error(data.error || "Erreur lors de la suppression");
@@ -167,8 +135,7 @@ export default function ProductsPage() {
     }
 
     try {
-      const loadingToast = toast.loading("Suppression en cours...");
-      
+      toast.loading("Suppression en cours...");
       const response = await fetch("/api/products/bulk", {
         method: "DELETE",
         headers: {
@@ -179,9 +146,7 @@ export default function ProductsPage() {
 
       const data = await response.json();
 
-      toast.dismiss(loadingToast);
-
-      if (response.ok) {
+      if (response.ok && data.success) {
         toast.success(`${selectedProducts.length} produit(s) supprimé(s) avec succès`);
         setSelectedProducts([]);
         fetchProducts();
@@ -194,18 +159,13 @@ export default function ProductsPage() {
     }
   };
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('fr-FR', {
-      style: 'currency',
-      currency: 'EUR',
-      minimumFractionDigits: 2,
-    }).format(price);
-  };
-
-  const truncateText = (text: string | null, maxLength: number = 100) => {
-    if (!text) return "-";
-    if (text.length <= maxLength) return text;
-    return text.substring(0, maxLength) + '...';
+  const getInitials = (name: string) => {
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
   };
 
   // Colonne avec boutons d'action visibles
@@ -251,7 +211,7 @@ export default function ProductsPage() {
               <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
               <AlertDialogDescription>
                 Êtes-vous sûr de vouloir supprimer le produit "{productName}" ? 
-                Cette action est irréversible. Le produit sera retiré de toutes les factures existantes.
+                Cette action est irréversible.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -283,9 +243,9 @@ export default function ProductsPage() {
               <Eye className="h-4 w-4 mr-2" />
               Voir les détails
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => router.push(`/invoices/create?productId=${productId}`)}>
-              <FileText className="h-4 w-4 mr-2" />
-              Créer une facture avec ce produit
+            <DropdownMenuItem onClick={() => router.push(`/products/edit/${productId}`)}>
+              <Edit className="h-4 w-4 mr-2" />
+              Modifier
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem 
@@ -334,28 +294,31 @@ export default function ProductsPage() {
       header: "Produit",
       cell: ({ row }) => {
         const product = row.original;
-        const invoiceCount = product._count?.invoiceItems || 0;
+        const initials = getInitials(product.name);
+        const usageCount = product._count?.invoiceItems || 0;
 
         return (
           <div 
-            className="flex items-start gap-3 cursor-pointer"
+            className="flex items-center gap-3 cursor-pointer"
             onClick={() => router.push(`/products/${product.id}`)}
           >
-            <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-              <Package className="h-5 w-5 text-primary" />
-            </div>
+            <Avatar className="h-9 w-9 border">
+              <AvatarFallback className="bg-blue-100 text-blue-600">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
             <div className="flex-1 min-w-0">
               <p className="font-medium truncate">{product.name}</p>
               {product.description && (
                 <p className="text-sm text-muted-foreground line-clamp-2">
-                  {truncateText(product.description, 80)}
+                  {product.description}
                 </p>
               )}
-              {invoiceCount > 0 && (
+              {usageCount > 0 && (
                 <div className="flex items-center gap-1 mt-1">
-                  <ShoppingCart className="h-3 w-3 text-primary" />
+                  <FileText className="h-3 w-3 text-primary" />
                   <span className="text-xs text-primary">
-                    Utilisé dans {invoiceCount} facture{invoiceCount > 1 ? 's' : ''}
+                    Utilisé dans {usageCount} facture{usageCount > 1 ? 's' : ''}
                   </span>
                 </div>
               )}
@@ -372,21 +335,22 @@ export default function ProductsPage() {
         return (
           <div className="flex items-center gap-2">
             <Euro className="h-4 w-4 text-muted-foreground" />
-            <span className="font-semibold">{formatPrice(price)}</span>
-            <span className="text-sm text-muted-foreground">HT</span>
+            <span className="font-medium">{price.toFixed(2)} €</span>
           </div>
         );
       },
     },
     {
-      accessorKey: "company",
-      header: "Société",
+      accessorKey: "usage",
+      header: "Utilisation",
       cell: ({ row }) => {
-        const companyName = row.original.company?.companyName || "Société";
+        const usageCount = row.original._count?.invoiceItems || 0;
         return (
-          <Badge variant="outline" className="whitespace-nowrap">
-            {companyName}
-          </Badge>
+          <div className="text-center">
+            <Badge variant={usageCount > 0 ? "default" : "secondary"} className="min-w-[70px]">
+              {usageCount} fois
+            </Badge>
+          </div>
         );
       },
     },
@@ -396,8 +360,7 @@ export default function ProductsPage() {
       cell: ({ row }) => {
         try {
           return (
-            <div className="text-sm text-muted-foreground flex items-center gap-1">
-              <Calendar className="h-3 w-3" />
+            <div className="text-sm text-muted-foreground">
               {format(new Date(row.original.createdAt), "dd/MM/yyyy")}
             </div>
           );
@@ -429,16 +392,14 @@ export default function ProductsPage() {
         
         <Card>
           <CardHeader>
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="flex items-center justify-between">
               <Skeleton className="h-6 w-48" />
-              <div className="flex items-center gap-2">
-                <Skeleton className="h-10 w-40" />
-                <Skeleton className="h-10 w-64" />
-              </div>
+              <Skeleton className="h-10 w-64" />
             </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
+              <Skeleton className="h-10 w-full" />
               {[...Array(5)].map((_, i) => (
                 <Skeleton key={i} className="h-16 w-full" />
               ))}
@@ -484,13 +445,6 @@ export default function ProductsPage() {
     </AlertDialog>
   );
 
-  // Calcul des statistiques
-  const totalProducts = products.length;
-  const usedInInvoices = products.filter(p => (p._count?.invoiceItems || 0) > 0).length;
-  const averagePrice = totalProducts > 0 
-    ? products.reduce((sum, p) => sum + p.price, 0) / totalProducts 
-    : 0;
-
   return (
     <div className="p-6 space-y-6">
       {/* Header avec titre à gauche et bouton à droite */}
@@ -498,7 +452,7 @@ export default function ProductsPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Produits</h1>
           <p className="text-muted-foreground mt-1">
-            Gérez votre catalogue de produits et services
+            Gérez votre catalogue de produits
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -518,21 +472,21 @@ export default function ProductsPage() {
             <Package className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalProducts}</div>
-            <p className="text-xs text-muted-foreground">Dans votre catalogue</p>
+            <div className="text-2xl font-bold">{products.length}</div>
+            <p className="text-xs text-muted-foreground">Tous vos produits</p>
           </CardContent>
         </Card>
         
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Utilisés</CardTitle>
-            <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Produits utilisés</CardTitle>
+            <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{usedInInvoices}</div>
-            <p className="text-xs text-muted-foreground">
-              Dans des factures ({totalProducts > 0 ? Math.round((usedInInvoices / totalProducts) * 100) : 0}%)
-            </p>
+            <div className="text-2xl font-bold">
+              {products.filter(p => (p._count?.invoiceItems || 0) > 0).length}
+            </div>
+            <p className="text-xs text-muted-foreground">Dans des factures</p>
           </CardContent>
         </Card>
         
@@ -542,8 +496,12 @@ export default function ProductsPage() {
             <Euro className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatPrice(averagePrice)}</div>
-            <p className="text-xs text-muted-foreground">Prix HT moyen</p>
+            <div className="text-2xl font-bold">
+              {products.length > 0 
+                ? (products.reduce((sum, p) => sum + p.price, 0) / products.length).toFixed(2) 
+                : "0.00"} €
+            </div>
+            <p className="text-xs text-muted-foreground">Moyenne des prix</p>
           </CardContent>
         </Card>
       </div>
@@ -558,31 +516,14 @@ export default function ProductsPage() {
                 {products.length} produit{products.length !== 1 ? "s" : ""} trouvé{products.length !== 1 ? "s" : ""}
               </CardDescription>
             </div>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="w-full sm:w-[200px]">
-                <Select value={selectedCompany} onValueChange={setSelectedCompany}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Toutes les sociétés" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Toutes les sociétés</SelectItem>
-                    {companies.map((company) => (
-                      <SelectItem key={company.id} value={company.id}>
-                        {company.companyName || 'Société sans nom'}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="relative w-full sm:w-[300px]">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Rechercher un produit..."
-                  className="pl-10"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
+            <div className="relative w-full md:w-auto">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Rechercher un produit..."
+                className="pl-10 w-full md:w-[300px]"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
             </div>
           </div>
         </CardHeader>
@@ -594,7 +535,7 @@ export default function ProductsPage() {
               </div>
               <h3 className="text-lg font-semibold">Aucun produit</h3>
               <p className="text-muted-foreground mt-1 mb-4">
-                {searchQuery || selectedCompany !== "all"
+                {searchQuery 
                   ? "Aucun produit ne correspond à votre recherche" 
                   : "Commencez par ajouter votre premier produit"}
               </p>
@@ -611,7 +552,6 @@ export default function ProductsPage() {
               searchPlaceholder="Rechercher par nom, description..."
               isLoading={isLoading}
               onRowClick={(row) => router.push(`/products/${row.id}`)}
-              
               emptyState={
                 <div className="py-12 text-center">
                   <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
@@ -619,11 +559,8 @@ export default function ProductsPage() {
                   <p className="text-muted-foreground mb-4">
                     Aucun produit ne correspond à votre recherche
                   </p>
-                  <Button variant="outline" onClick={() => {
-                    setSearchQuery("");
-                    setSelectedCompany("all");
-                  }}>
-                    Réinitialiser les filtres
+                  <Button variant="outline" onClick={() => setSearchQuery("")}>
+                    Réinitialiser la recherche
                   </Button>
                 </div>
               }

@@ -16,7 +16,8 @@ import {
   MapPin,
   FileText,
   Users,
-  AlertCircle
+  AlertCircle,
+  Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,7 +31,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -70,6 +71,7 @@ export default function ClientsPage() {
   const [selectedClients, setSelectedClients] = useState<string[]>([]);
   const [clientToDelete, setClientToDelete] = useState<string | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Debounce search
   useEffect(() => {
@@ -111,6 +113,7 @@ export default function ClientsPage() {
     if (!clientToDelete) return;
 
     try {
+      setIsDeleting(true);
       const response = await fetch(`/api/clients/${clientToDelete}`, {
         method: "DELETE",
       });
@@ -119,16 +122,20 @@ export default function ClientsPage() {
 
       if (response.ok && data.success) {
         toast.success(data.message || "Client supprimé avec succès");
-        fetchClients();
+        // Retirer le client supprimé de la liste
+        setClients(prev => prev.filter(client => client.id !== clientToDelete));
+        // Réinitialiser la sélection si ce client était sélectionné
+        setSelectedClients(prev => prev.filter(id => id !== clientToDelete));
       } else {
         toast.error(data.error || "Erreur lors de la suppression");
       }
     } catch (error) {
       console.error("Error deleting client:", error);
-      toast.error("Erreur de connexion");
+      toast.error("Erreur de connexion au serveur");
     } finally {
       setClientToDelete(null);
       setShowDeleteDialog(false);
+      setIsDeleting(false);
     }
   };
 
@@ -139,8 +146,9 @@ export default function ClientsPage() {
     }
 
     try {
-      toast.loading("Suppression en cours...");
-      const response = await fetch("/api/clients/bulk", {
+      const toastId = toast.loading("Suppression en cours...");
+      
+      const response = await fetch("/api/clients", {
         method: "DELETE",
         headers: {
           "Content-Type": "application/json",
@@ -151,15 +159,20 @@ export default function ClientsPage() {
       const data = await response.json();
 
       if (response.ok && data.success) {
-        toast.success(`${selectedClients.length} client(s) supprimé(s) avec succès`);
+        toast.success(`${selectedClients.length} client(s) supprimé(s) avec succès`, {
+          id: toastId
+        });
+        // Retirer les clients supprimés de la liste
+        setClients(prev => prev.filter(client => !selectedClients.includes(client.id)));
         setSelectedClients([]);
-        fetchClients();
       } else {
-        toast.error(data.error || "Erreur lors de la suppression");
+        toast.error(data.error || "Erreur lors de la suppression", {
+          id: toastId
+        });
       }
     } catch (error) {
       console.error("Error bulk deleting clients:", error);
-      toast.error("Erreur de connexion");
+      toast.error("Erreur de connexion au serveur");
     }
   };
 
@@ -189,60 +202,28 @@ export default function ClientsPage() {
           <Edit className="h-4 w-4" />
         </Button>
         
-        <AlertDialog open={showDeleteDialog && clientToDelete === clientId} onOpenChange={(open) => {
-          if (!open) {
-            setClientToDelete(null);
-            setShowDeleteDialog(false);
-          }
-        }}>
-          <AlertDialogTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={(e) => {
-                e.stopPropagation();
-                setClientToDelete(clientId);
-                setShowDeleteDialog(true);
-              }}
-              title="Supprimer"
-              className="h-8 w-8 text-destructive hover:text-destructive"
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
-              <AlertDialogDescription>
-                Êtes-vous sûr de vouloir supprimer le client "{clientName}" ? 
-                Cette action est irréversible et supprimera également toutes les factures associées.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => {
-                setClientToDelete(null);
-                setShowDeleteDialog(false);
-              }}>
-                Annuler
-              </AlertDialogCancel>
-              <AlertDialogAction 
-                onClick={handleDeleteClient}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              >
-                Supprimer
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={(e) => {
+            e.stopPropagation();
+            setClientToDelete(clientId);
+            setShowDeleteDialog(true);
+          }}
+          title="Supprimer"
+          className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="h-8 w-8 p-0">
+            <Button variant="ghost" className="h-8 w-8 p-0" onClick={(e) => e.stopPropagation()}>
               <span className="sr-only">Plus d'options</span>
               <MoreVertical className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
+          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
             <DropdownMenuItem onClick={() => router.push(`/clients/${clientId}`)}>
               <Eye className="h-4 w-4 mr-2" />
               Voir les détails
@@ -275,7 +256,11 @@ export default function ClientsPage() {
         <input
           type="checkbox"
           checked={table.getIsAllPageRowsSelected()}
-          onChange={(e) => table.toggleAllPageRowsSelected(!!e.target.checked)}
+          onChange={(e) => {
+            table.toggleAllPageRowsSelected(!!e.target.checked);
+            const allRowIds = table.getRowModel().rows.map(row => row.original.id);
+            setSelectedClients(e.target.checked ? allRowIds : []);
+          }}
           className="h-4 w-4 rounded border-gray-300"
         />
       ),
@@ -286,6 +271,12 @@ export default function ClientsPage() {
           onChange={(e) => {
             e.stopPropagation();
             row.toggleSelected(!!e.target.checked);
+            const clientId = row.original.id;
+            setSelectedClients(prev => 
+              e.target.checked 
+                ? [...prev, clientId]
+                : prev.filter(id => id !== clientId)
+            );
           }}
           className="h-4 w-4 rounded border-gray-300"
         />
@@ -303,7 +294,7 @@ export default function ClientsPage() {
 
         return (
           <div 
-            className="flex items-center gap-3 cursor-pointer"
+            className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 p-2 -m-2 rounded transition-colors"
             onClick={() => router.push(`/clients/${client.id}`)}
           >
             <Avatar className="h-9 w-9 border">
@@ -427,6 +418,47 @@ export default function ClientsPage() {
     );
   }
 
+  // Dialog pour la suppression d'un seul client
+  const DeleteDialog = () => (
+    <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+      <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
+          <AlertDialogDescription>
+            {clientToDelete && clients.find(c => c.id === clientToDelete)?._count?.invoices ? (
+              <>
+                Êtes-vous sûr de vouloir supprimer le client "{clients.find(c => c.id === clientToDelete)?.name}" ? 
+                Cette action supprimera également toutes les factures associées à ce client.
+              </>
+            ) : (
+              <>
+                Êtes-vous sûr de vouloir supprimer le client "{clients.find(c => c.id === clientToDelete)?.name}" ? 
+                Cette action est irréversible.
+              </>
+            )}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isDeleting}>Annuler</AlertDialogCancel>
+          <AlertDialogAction 
+            onClick={handleDeleteClient}
+            disabled={isDeleting}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            {isDeleting ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Suppression...
+              </>
+            ) : (
+              "Supprimer"
+            )}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+
   // Dialog pour la suppression en masse
   const BulkDeleteDialog = () => (
     <AlertDialog>
@@ -463,126 +495,131 @@ export default function ClientsPage() {
   );
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header avec titre à gauche et bouton à droite */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Clients</h1>
-          <p className="text-muted-foreground mt-1">
-            Gérez votre liste de clients
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <BulkDeleteDialog />
-          <Button onClick={() => router.push("/clients/create")} className="gap-2">
-            <Plus className="h-4 w-4" />
-            Nouveau client
-          </Button>
-        </div>
-      </div>
-
-      {/* Cartes de statistiques */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Clients</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{clients.length}</div>
-            <p className="text-xs text-muted-foreground">Tous vos clients</p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Avec factures</CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {clients.filter(c => (c._count?.invoices || 0) > 0).length}
-            </div>
-            <p className="text-xs text-muted-foreground">Clients actifs</p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Sans email</CardTitle>
-            <Mail className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {clients.filter(c => !c.email).length}
-            </div>
-            <p className="text-xs text-muted-foreground">À compléter</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Tableau des clients */}
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <CardTitle>Liste des clients</CardTitle>
-              <CardDescription>
-                {clients.length} client{clients.length !== 1 ? "s" : ""} trouvé{clients.length !== 1 ? "s" : ""}
-              </CardDescription>
-            </div>
-            <div className="relative w-full md:w-auto">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Rechercher un client..."
-                className="pl-10 w-full md:w-[300px]"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
+    <>
+      <DeleteDialog />
+      
+      <div className="p-6 space-y-6">
+        {/* Header avec titre à gauche et bouton à droite */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Clients</h1>
+            <p className="text-muted-foreground mt-1">
+              Gérez votre liste de clients
+            </p>
           </div>
-        </CardHeader>
-        <CardContent>
-          {clients.length === 0 && !isLoading ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="h-24 w-24 rounded-full bg-muted flex items-center justify-center mb-4">
-                <User className="h-12 w-12 text-muted-foreground" />
+          <div className="flex items-center gap-2">
+            <BulkDeleteDialog />
+            <Button onClick={() => router.push("/clients/create")} className="gap-2">
+              <Plus className="h-4 w-4" />
+              Nouveau client
+            </Button>
+          </div>
+        </div>
+
+        {/* Cartes de statistiques */}
+        <div className="grid gap-4 md:grid-cols-3">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Clients</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{clients.length}</div>
+              <p className="text-xs text-muted-foreground">Tous vos clients</p>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Avec factures</CardTitle>
+              <FileText className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {clients.filter(c => (c._count?.invoices || 0) > 0).length}
               </div>
-              <h3 className="text-lg font-semibold">Aucun client</h3>
-              <p className="text-muted-foreground mt-1 mb-4">
-                {searchQuery 
-                  ? "Aucun client ne correspond à votre recherche" 
-                  : "Commencez par ajouter votre premier client"}
-              </p>
-              <Button onClick={() => router.push("/clients/create")}>
-                <Plus className="h-4 w-4 mr-2" />
-                Ajouter un client
-              </Button>
+              <p className="text-xs text-muted-foreground">Clients actifs</p>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Sans email</CardTitle>
+              <Mail className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {clients.filter(c => !c.email).length}
+              </div>
+              <p className="text-xs text-muted-foreground">À compléter</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Tableau des clients */}
+        <Card>
+          <CardHeader>
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div>
+                <CardTitle>Liste des clients</CardTitle>
+                <CardDescription>
+                  {clients.length} client{clients.length !== 1 ? "s" : ""} trouvé{clients.length !== 1 ? "s" : ""}
+                  {selectedClients.length > 0 && ` • ${selectedClients.length} sélectionné(s)`}
+                </CardDescription>
+              </div>
+              <div className="relative w-full md:w-auto">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Rechercher un client..."
+                  className="pl-10 w-full md:w-[300px]"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
             </div>
-          ) : (
-            <DataTable
-              columns={columns}
-              data={clients}
-              searchKey="name"
-              searchPlaceholder="Rechercher par nom, email..."
-              isLoading={isLoading}
-              onRowClick={(row) => router.push(`/clients/${row.id}`)}
-              emptyState={
-                <div className="py-12 text-center">
-                  <User className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-semibold mb-2">Aucun résultat</h3>
-                  <p className="text-muted-foreground mb-4">
-                    Aucun client ne correspond à votre recherche
-                  </p>
-                  <Button variant="outline" onClick={() => setSearchQuery("")}>
-                    Réinitialiser la recherche
-                  </Button>
+          </CardHeader>
+          <CardContent>
+            {clients.length === 0 && !isLoading ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="h-24 w-24 rounded-full bg-muted flex items-center justify-center mb-4">
+                  <User className="h-12 w-12 text-muted-foreground" />
                 </div>
-              }
-            />
-          )}
-        </CardContent>
-      </Card>
-    </div>
+                <h3 className="text-lg font-semibold">Aucun client</h3>
+                <p className="text-muted-foreground mt-1 mb-4">
+                  {searchQuery 
+                    ? "Aucun client ne correspond à votre recherche" 
+                    : "Commencez par ajouter votre premier client"}
+                </p>
+                <Button onClick={() => router.push("/clients/create")}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Ajouter un client
+                </Button>
+              </div>
+            ) : (
+              <DataTable
+                columns={columns}
+                data={clients}
+                searchKey="name"
+                searchPlaceholder="Rechercher par nom, email..."
+                isLoading={isLoading}
+                onRowClick={(row) => router.push(`/clients/${row.id}`)}
+                emptyState={
+                  <div className="py-12 text-center">
+                    <User className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                    <h3 className="text-lg font-semibold mb-2">Aucun résultat</h3>
+                    <p className="text-muted-foreground mb-4">
+                      Aucun client ne correspond à votre recherche
+                    </p>
+                    <Button variant="outline" onClick={() => setSearchQuery("")}>
+                      Réinitialiser la recherche
+                    </Button>
+                  </div>
+                }
+              />
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </>
   );
 }
