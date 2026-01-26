@@ -2,58 +2,25 @@ import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { subDays, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
 import prisma from '@/lib/prisma';
+import { randomBytes } from 'crypto';
 
 // Fonction pour générer le prochain numéro de facture
-async function generateInvoiceNumber(companyId: string) {
-  // Chercher la dernière facture de l'année en cours
-  const now = new Date();
-  const currentYear = now.getFullYear();
-  const yearPrefix = currentYear.toString().slice(-2); // "24" pour 2024
-  
-  const lastInvoice = await prisma.invoice.findFirst({
-    where: {
-      companyId,
-      invoiceNumber: {
-        startsWith: `INV-${yearPrefix}`,
-      },
-    },
-    orderBy: {
-      createdAt: 'desc',
-    },
-    select: {
-      invoiceNumber: true,
-    },
-  });
+const generateUniqueId = async () => {
+  let uniqueId;
+  let isUnique = false;
 
-  let nextNumber = 1;
-  
-  if (lastInvoice?.invoiceNumber) {
-    // Extraire le numéro de la dernière facture
-    const match = lastInvoice.invoiceNumber.match(/INV-\d{2}-(\d+)$/);
-    if (match) {
-      nextNumber = parseInt(match[1]) + 1;
-    } else {
-      // Si le format est différent, chercher toutes les factures pour trouver le plus grand numéro
-      const allInvoices = await prisma.invoice.findMany({
-        where: { companyId },
-        select: { invoiceNumber: true },
-      });
-
-      const invoiceNumbers = allInvoices
-        .map(inv => {
-          const matches = inv.invoiceNumber.match(/(\d+)$/);
-          return matches ? parseInt(matches[1]) : 0;
-        })
-        .filter(num => !isNaN(num));
-
-      if (invoiceNumbers.length > 0) {
-        nextNumber = Math.max(...invoiceNumbers) + 1;
+  while (!isUnique) {
+      uniqueId = randomBytes(3).toString('hex')
+      const existingInvoice = await prisma.invoice.findUnique({
+          where: {
+              id: uniqueId
+          }
+      })
+      if (!existingInvoice) {
+          isUnique = true;
       }
-    }
   }
-
-  // Format: INV-24-000001
-  return `INV-${yearPrefix}-${nextNumber.toString().padStart(6, '0')}`;
+  return uniqueId
 }
 
 export async function GET(request: Request) {
@@ -332,7 +299,7 @@ export async function POST(request: Request) {
     }
 
     // Générer le numéro de facture automatiquement
-    const invoiceNumber = await generateInvoiceNumber(companyId);
+    const invoiceNumber = await generateUniqueId() as string;
 
     // Calculer les totaux
     let subtotal = 0;

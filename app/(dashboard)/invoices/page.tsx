@@ -68,10 +68,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
 interface Invoice {
@@ -980,7 +977,7 @@ export default function InvoicesPage() {
                   searchKey="invoiceNumber"
                   searchPlaceholder="Rechercher..."
                   isLoading={isLoading}
-                  onRowClick={(row) => router.push(`/invoices/${row.id}`)}
+                  // onRowClick={(row) => router.push(`/invoices/${row.id}`)}
                   showSearch={false}
                 />
               </div>

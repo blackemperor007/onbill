@@ -79,17 +79,3 @@ export async function syncUserWithClerk() {
     return null
   }
 }
-
-export async function checkUserHasCompany(userId: string) {
-  try {
-    const user = await prisma.user.findUnique({
-      where: { clerkUserId: userId },
-      select: { companyId: true }
-    })
-    
-    return !!user?.companyId
-  } catch (error) {
-    console.error("Erreur checkUserHasCompany:", error)
-    return false
-  }
-}

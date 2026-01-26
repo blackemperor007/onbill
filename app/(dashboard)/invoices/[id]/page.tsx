@@ -303,7 +303,6 @@ export default function InvoiceDetailsPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={handleDownloadPDF}
             disabled={generatingPDF}
             className="gap-2"
           >
